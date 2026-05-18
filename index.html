@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CollageForge - Browser Image Collage Maker</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={theme:{extend:{colors:{
+brand:{50:'#fff7ed',100:'#ffedd5',200:'#fed7aa',300:'#fdba74',400:'#fb923c',500:'#f97316',600:'#ea580c',700:'#c2410c',800:'#9a3412',900:'#7c2d12'},
+surface:{800:'#1e1e2e',700:'#252538',600:'#2d2d44',500:'#3a3a55',400:'#4a4a6a'}
+}}}}
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#0f0f1a;color:#e2e8f0;overflow:hidden;height:100vh}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#1e1e2e}
+::-webkit-scrollbar-thumb{background:#4a4a6a;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#f97316}
+input[type="range"]{-webkit-appearance:none;appearance:none;height:6px;background:#2d2d44;border-radius:3px;outline:none}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;background:#f97316;border-radius:50%;cursor:pointer;border:2px solid #1e1e2e}
+input[type="range"]::-moz-range-thumb{width:16px;height:16px;background:#f97316;border-radius:50%;cursor:pointer;border:2px solid #1e1e2e}
+input[type="color"]{-webkit-appearance:none;appearance:none;border:2px solid #3a3a55;border-radius:8px;cursor:pointer;background:transparent}
+input[type="color"]::-webkit-color-swatch-wrapper{padding:2px}
+input[type="color"]::-webkit-color-swatch{border-radius:5px;border:none}
+.panel{background:#1e1e2e;border:1px solid #2d2d44}
+.btn{transition:all .15s ease}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.mode-tab{position:relative;transition:all .2s ease}
+.mode-tab.active{color:#f97316}
+.mode-tab.active::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;background:#f97316;border-radius:1px}
+.thumb-card{transition:all .15s ease;cursor:grab}
+.thumb-card:hover{border-color:#f97316;transform:scale(1.03)}
+.thumb-card.dragging{opacity:0.4;transform:scale(0.95)}
+.thumb-card.drag-over{border-color:#f97316;background:rgba(249,115,22,0.1)}
+.canvas-wrap{background:repeating-conic-gradient(#1a1a2e 0% 25%,#16162a 0% 50%) 0 0/20px 20px}
+.drop-highlight{outline:3px dashed #f97316;outline-offset:-3px}
+@keyframes fadeIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
+.fade-in{animation:fadeIn .2s ease}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.upload-pulse{animation:pulse 1.5s ease infinite}
+.export-menu{display:none}
+.export-menu.open{display:block}
+</style>
+</head>
+<body class="flex flex-col h-screen">
+
+<!-- Top Bar -->
+<header class="flex items-center justify-between px-4 py-2 border-b border-surface-600 bg-surface-800 shrink-0 z-30">
+  <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2">
+      <svg class="w-7 h-7 text-brand-500" viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor" opacity=".9"/><rect x="16" y="2" width="10" height="10" rx="2" fill="currentColor" opacity=".6"/><rect x="2" y="16" width="10" height="10" rx="2" fill="currentColor" opacity=".6"/><rect x="16" y="16" width="10" height="10" rx="2" fill="currentColor" opacity=".4"/></svg>
+      <h1 class="text-lg font-bold tracking-tight">Collage<span class="text-brand-500">Forge</span></h1>
+    </div>
+    <span class="text-xs text-surface-400 hidden sm:inline ml-1">Privacy-First Collage Maker</span>
+  </div>
+
+  <nav class="flex items-center gap-1 bg-surface-700 rounded-lg p-1">
+    <button onclick="setMode('grid')" id="tab-grid" class="mode-tab active px-3 py-1.5 rounded-md text-sm font-medium">Grid</button>
+    <button onclick="setMode('long')" id="tab-long" class="mode-tab px-3 py-1.5 rounded-md text-sm font-medium">Long</button>
+    <button onclick="setMode('free')" id="tab-free" class="mode-tab px-3 py-1.5 rounded-md text-sm font-medium">Free</button>
+  </nav>
+
+  <div class="flex items-center gap-2">
+    <div class="relative">
+      <button onclick="toggleExportMenu()" class="btn flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+        Export
+      </button>
+      <div id="export-menu" class="export-menu absolute right-0 top-full mt-2 panel rounded-xl shadow-2xl p-4 w-72 z-50 fade-in">
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs font-medium text-gray-400 block mb-1">Format</label>
+            <div class="flex gap-2">
+              <button onclick="setExportFormat('png')" id="fmt-png" class="flex-1 py-1.5 rounded-lg text-sm font-medium bg-brand-600 text-white">PNG</button>
+              <button onclick="setExportFormat('jpeg')" id="fmt-jpeg" class="flex-1 py-1.5 rounded-lg text-sm font-medium bg-surface-600 text-gray-300 hover:bg-surface-500">JPEG</button>
+            </div>
+          </div>
+          <div id="quality-section" class="hidden">
+            <label class="text-xs font-medium text-gray-400 flex justify-between mb-1"><span>Quality</span><span id="quality-val">92%</span></label>
+            <input type="range" min="10" max="100" value="92" id="quality-slider" class="w-full" oninput="exportQuality=this.value/100;document.getElementById('quality-val').textContent=this.value+'%'">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-gray-400 flex justify-between mb-1"><span>Scale</span><span id="scale-val">1x</span></label>
+            <input type="range" min="1" max="4" step="0.5" value="1" id="scale-slider" class="w-full" oninput="exportScale=parseFloat(this.value);document.getElementById('scale-val').textContent=this.value+'x'">
+          </div>
+          <button onclick="doExport()" class="btn w-full py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium">Download</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- Main Layout -->
+<div class="flex flex-1 overflow-hidden">
+
+  <!-- Left Settings Panel -->
+  <aside class="w-[250px] shrink-0 panel border-r border-surface-600 overflow-y-auto p-4 space-y-5 z-20">
+    <div>
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Layout</h3>
+      <div id="grid-settings">
+        <label class="text-xs text-gray-400 flex justify-between mb-1"><span>Columns</span><span id="cols-val">2</span></label>
+        <input type="range" min="1" max="6" value="2" id="cols-slider" class="w-full" oninput="settings.columns=+this.value;document.getElementById('cols-val').textContent=this.value;render()">
+      </div>
+      <div id="long-settings" class="hidden">
+        <p class="text-xs text-gray-500">Images stacked vertically, auto-width.</p>
+      </div>
+      <div id="free-settings" class="hidden space-y-3">
+        <label class="text-xs text-gray-400 flex justify-between mb-1"><span>Canvas Width</span><span id="cw-val">1200</span></label>
+        <input type="range" min="400" max="3000" step="50" value="1200" id="cw-slider" class="w-full" oninput="settings.canvasW=+this.value;document.getElementById('cw-val').textContent=this.value;render()">
+        <label class="text-xs text-gray-400 flex justify-between mb-1"><span>Canvas Height</span><span id="ch-val">800</span></label>
+        <input type="range" min="300" max="3000" step="50" value="800" id="ch-slider" class="w-full" oninput="settings.canvasH=+this.value;document.getElementById('ch-val').textContent=this.value;render()">
+      </div>
+    </div>
+
+    <div>
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Style</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-gray-400 flex justify-between mb-1"><span>Border Radius</span><span id="radius-val">8px</span></label>
+          <input type="range" min="0" max="50" value="8" id="radius-slider" class="w-full" oninput="settings.borderRadius=+this.value;document.getElementById('radius-val').textContent=this.value+'px';render()">
+        </div>
+        <div>
+          <label class="text-xs text-gray-400 flex justify-between mb-1"><span>Gap</span><span id="gap-val">8px</span></label>
+          <input type="range" min="0" max="30" value="8" id="gap-slider" class="w-full" oninput="settings.gap=+this.value;document.getElementById('gap-val').textContent=this.value+'px';render()">
+        </div>
+        <div>
+          <label class="text-xs text-gray-400 flex justify-between mb-1"><span>Padding</span><span id="pad-val">16px</span></label>
+          <input type="range" min="0" max="50" value="16" id="pad-slider" class="w-full" oninput="settings.padding=+this.value;document.getElementById('pad-val').textContent=this.value+'px';render()">
+        </div>
+        <div>
+          <label class="text-xs text-gray-400 block mb-1">Background</label>
+          <div class="flex items-center gap-2">
+            <input type="color" id="bg-color" value="#1a1a2e" class="w-10 h-8 rounded" oninput="settings.bgColor=this.value;render()">
+            <span id="bg-hex" class="text-xs text-gray-500 font-mono">#1a1a2e</span>
+            <div class="flex gap-1 ml-auto">
+              <button onclick="settings.bgColor='#ffffff';document.getElementById('bg-color').value='#ffffff';document.getElementById('bg-hex').textContent='#ffffff';render()" class="w-6 h-6 rounded bg-white border border-surface-500" title="White"></button>
+              <button onclick="settings.bgColor='#000000';document.getElementById('bg-color').value='#000000';document.getElementById('bg-hex').textContent='#000000';render()" class="w-6 h-6 rounded bg-black border border-surface-500" title="Black"></button>
+              <button onclick="settings.bgColor='transparent';render()" class="w-6 h-6 rounded border border-surface-500 overflow-hidden" title="Transparent" style="background:repeating-conic-gradient(#ccc 0% 25%,#fff 0% 50%) 0 0/8px 8px"></button>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center justify-between">
+          <label class="text-xs text-gray-400">Shadow</label>
+          <button id="shadow-toggle" onclick="toggleShadow()" class="w-10 h-5 rounded-full bg-surface-600 relative transition-colors">
+            <span class="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-gray-400 transition-transform"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Quick Presets</h3>
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="applyPreset('instagram')" class="btn py-2 px-3 bg-surface-600 hover:bg-surface-500 rounded-lg text-xs font-medium">Instagram</button>
+        <button onclick="applyPreset('pinterest')" class="btn py-2 px-3 bg-surface-600 hover:bg-surface-500 rounded-lg text-xs font-medium">Pinterest</button>
+        <button onclick="applyPreset('twitter')" class="btn py-2 px-3 bg-surface-600 hover:bg-surface-500 rounded-lg text-xs font-medium">Twitter/X</button>
+        <button onclick="applyPreset('facebook')" class="btn py-2 px-3 bg-surface-600 hover:bg-surface-500 rounded-lg text-xs font-medium">Facebook</button>
+      </div>
+    </div>
+
+    <div class="pt-3 border-t border-surface-600">
+      <p class="text-xs text-gray-500 leading-relaxed">All processing happens in your browser. No images are uploaded to any server.</p>
+    </div>
+  </aside>
+
+  <!-- Canvas Workspace -->
+  <main id="workspace" class="flex-1 overflow-auto flex items-center justify-center canvas-wrap relative">
+    <div id="canvas-container" class="relative" style="padding:24px">
+      <canvas id="canvas" width="800" height="600"></canvas>
+    </div>
+    <!-- Empty state -->
+    <div id="empty-state" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <div class="text-center pointer-events-auto">
+        <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-surface-700 flex items-center justify-center">
+          <svg class="w-10 h-10 text-surface-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z"/></svg>
+        </div>
+        <p class="text-gray-400 text-sm mb-1">Drop images here or click Upload</p>
+        <p class="text-gray-600 text-xs">Supports JPG, PNG, WebP, GIF</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Thumbnails Panel -->
+  <aside class="w-[220px] shrink-0 panel border-l border-surface-600 flex flex-col z-20">
+    <div class="p-3 border-b border-surface-600 flex items-center justify-between">
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Images (<span id="img-count">0</span>)</h3>
+    </div>
+    <div id="thumb-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+      <!-- Thumbnails render here -->
+    </div>
+    <div class="p-3 border-t border-surface-600 space-y-2">
+      <input type="file" id="file-input" multiple accept="image/*" class="hidden" onchange="handleFiles(this.files)">
+      <button onclick="document.getElementById('file-input').click()" class="btn w-full py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+        Upload Images
+      </button>
+      <button onclick="clearAll()" class="btn w-full py-2 bg-surface-600 hover:bg-red-900/50 text-gray-400 hover:text-red-300 rounded-lg text-sm font-medium">Clear All</button>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ---- State ----
+let images = [];
+let nextId = 1;
+let mode = 'grid';
+let settings = {
+  columns: 2,
+  gap: 8,
+  padding: 16,
+  borderRadius: 8,
+  bgColor: '#1a1a2e',
+  shadow: false,
+  canvasW: 1200,
+  canvasH: 800
+};
+let exportFormat = 'png';
+let exportQuality = 0.92;
+let exportScale = 1;
+
+// Free mode drag state
+let freeDrag = { active: false, id: null, offX: 0, offY: 0, resizing: false, handle: null };
+let selectedImageId = null;
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// ---- Presets ----
+const PRESETS = {
+  instagram: { mode:'grid', columns:2, gap:4, padding:4, borderRadius:0, bgColor:'#ffffff', canvasW:1080, canvasH:1080, shadow:false },
+  pinterest: { mode:'grid', columns:2, gap:8, padding:12, borderRadius:8, bgColor:'#ffffff', canvasW:1000, canvasH:1500, shadow:false },
+  twitter:   { mode:'grid', columns:2, gap:6, padding:10, borderRadius:8, bgColor:'#1a1a2e', canvasW:1200, canvasH:675, shadow:true },
+  facebook:  { mode:'grid', columns:3, gap:6, padding:10, borderRadius:8, bgColor:'#ffffff', canvasW:1200, canvasH:630, shadow:false }
+};
+
+window.applyPreset = function(name) {
+  const p = PRESETS[name];
+  if (!p) return;
+  Object.assign(settings, p);
+  syncUIToSettings();
+  setMode(p.mode);
+  render();
+};
+
+function syncUIToSettings() {
+  document.getElementById('cols-slider').value = settings.columns;
+  document.getElementById('cols-val').textContent = settings.columns;
+  document.getElementById('gap-slider').value = settings.gap;
+  document.getElementById('gap-val').textContent = settings.gap + 'px';
+  document.getElementById('pad-slider').value = settings.padding;
+  document.getElementById('pad-val').textContent = settings.padding + 'px';
+  document.getElementById('radius-slider').value = settings.borderRadius;
+  document.getElementById('radius-val').textContent = settings.borderRadius + 'px';
+  document.getElementById('cw-slider').value = settings.canvasW;
+  document.getElementById('cw-val').textContent = settings.canvasW;
+  document.getElementById('ch-slider').value = settings.canvasH;
+  document.getElementById('ch-val').textContent = settings.canvasH;
+  if (settings.bgColor === 'transparent') {
+    document.getElementById('bg-hex').textContent = 'transparent';
+  } else {
+    document.getElementById('bg-color').value = settings.bgColor;
+    document.getElementById('bg-hex').textContent = settings.bgColor;
+  }
+  updateShadowToggle();
+}
+
+// ---- Mode ----
+window.setMode = function(m) {
+  mode = m;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + m).classList.add('active');
+  document.getElementById('grid-settings').classList.toggle('hidden', m !== 'grid');
+  document.getElementById('long-settings').classList.toggle('hidden', m !== 'long');
+  document.getElementById('free-settings').classList.toggle('hidden', m !== 'free');
+  render();
+};
+
+// ---- Shadow toggle ----
+window.toggleShadow = function() {
+  settings.shadow = !settings.shadow;
+  updateShadowToggle();
+  render();
+};
+
+function updateShadowToggle() {
+  const btn = document.getElementById('shadow-toggle');
+  const dot = btn.querySelector('span');
+  if (settings.shadow) {
+    btn.style.background = '#f97316';
+    dot.style.transform = 'translateX(20px)';
+    dot.style.background = '#fff';
+  } else {
+    btn.style.background = '';
+    dot.style.transform = '';
+    dot.style.background = '';
+  }
+}
+
+// ---- Export ----
+window.toggleExportMenu = function() {
+  const menu = document.getElementById('export-menu');
+  menu.classList.toggle('open');
+};
+
+window.setExportFormat = function(fmt) {
+  exportFormat = fmt;
+  document.getElementById('fmt-png').className = fmt === 'png'
+    ? 'flex-1 py-1.5 rounded-lg text-sm font-medium bg-brand-600 text-white'
+    : 'flex-1 py-1.5 rounded-lg text-sm font-medium bg-surface-600 text-gray-300 hover:bg-surface-500';
+  document.getElementById('fmt-jpeg').className = fmt === 'jpeg'
+    ? 'flex-1 py-1.5 rounded-lg text-sm font-medium bg-brand-600 text-white'
+    : 'flex-1 py-1.5 rounded-lg text-sm font-medium bg-surface-600 text-gray-300 hover:bg-surface-500';
+  document.getElementById('quality-section').classList.toggle('hidden', fmt !== 'jpeg');
+};
+
+window.doExport = function() {
+  const sc = exportScale;
+  const tmpCanvas = document.createElement('canvas');
+  tmpCanvas.width = canvas.width * sc;
+  tmpCanvas.height = canvas.height * sc;
+  const tmpCtx = tmpCanvas.getContext('2d');
+  tmpCtx.scale(sc, sc);
+  drawCanvas(tmpCtx);
+  const mime = exportFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+  const q = exportFormat === 'jpeg' ? exportQuality : undefined;
+  tmpCanvas.toBlob(function(blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'collage.' + (exportFormat === 'jpeg' ? 'jpg' : 'png');
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, mime, q);
+  document.getElementById('export-menu').classList.remove('open');
+};
+
+// ---- File handling ----
+window.handleFiles = function(fileList) {
+  const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+  let loaded = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onload = function() {
+        images.push({
+          id: nextId++,
+          img: img,
+          name: file.name,
+          src: e.target.result,
+          rotation: 0,
+          // Free mode props
+          x: 20 + Math.random() * 100,
+          y: 20 + Math.random() * 100,
+          w: img.width,
+          h: img.height
+        });
+        loaded++;
+        if (loaded === files.length) {
+          render();
+          updateThumbs();
+        }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+window.clearAll = function() {
+  images = [];
+  selectedImageId = null;
+  render();
+  updateThumbs();
+};
+
+// ---- Thumbnails ----
+function updateThumbs() {
+  const list = document.getElementById('thumb-list');
+  document.getElementById('img-count').textContent = images.length;
+  document.getElementById('empty-state').style.display = images.length ? 'none' : 'flex';
+
+  list.innerHTML = '';
+  images.forEach((im, idx) => {
+    const card = document.createElement('div');
+    card.className = 'thumb-card flex items-center gap-2 p-2 bg-surface-700 rounded-lg border border-surface-600';
+    card.draggable = true;
+    card.dataset.idx = idx;
+    card.innerHTML = `
+      <img src="${im.src}" class="w-12 h-12 object-cover rounded" style="transform:rotate(${im.rotation}deg)">
+      <div class="flex-1 min-w-0">
+        <p class="text-xs text-gray-300 truncate">${escHtml(im.name)}</p>
+        <p class="text-xs text-gray-600">${im.img.width}x${im.img.height}</p>
+      </div>
+      <div class="flex flex-col gap-1">
+        <button onclick="rotateImage(${im.id})" class="p-1 rounded hover:bg-surface-500 text-gray-400 hover:text-brand-400" title="Rotate 90">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
+        <button onclick="deleteImage(${im.id})" class="p-1 rounded hover:bg-red-900/50 text-gray-400 hover:text-red-400" title="Delete">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    `;
+
+    // Drag reorder
+    card.addEventListener('dragstart', function(e) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', idx);
+      setTimeout(() => card.classList.add('dragging'), 0);
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', function(e) {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      const from = +e.dataTransfer.getData('text/plain');
+      const to = idx;
+      if (from !== to) {
+        const item = images.splice(from, 1)[0];
+        images.splice(to, 0, item);
+        render();
+        updateThumbs();
+      }
+    });
+
+    list.appendChild(card);
+  });
+}
+
+window.deleteImage = function(id) {
+  images = images.filter(i => i.id !== id);
+  if (selectedImageId === id) selectedImageId = null;
+  render();
+  updateThumbs();
+};
+
+window.rotateImage = function(id) {
+  const im = images.find(i => i.id === id);
+  if (!im) return;
+  im.rotation = (im.rotation + 90) % 360;
+  render();
+  updateThumbs();
+};
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ---- Render ----
+window.render = function() {
+  if (mode === 'grid') renderGrid();
+  else if (mode === 'long') renderLong();
+  else renderFree();
+};
+
+function getRotatedDims(img, rotation) {
+  if (rotation === 90 || rotation === 270) return { w: img.height, h: img.width };
+  return { w: img.width, h: img.height };
+}
+
+function drawRoundedImage(c, img, x, y, w, h, rotation, radius, shadow) {
+  c.save();
+  if (shadow) {
+    c.shadowColor = 'rgba(0,0,0,0.4)';
+    c.shadowBlur = 20;
+    c.shadowOffsetX = 0;
+    c.shadowOffsetY = 4;
+  }
+  // Clip rounded rect
+  c.beginPath();
+  roundRect(c, x, y, w, h, radius);
+  c.clip();
+
+  if (shadow) {
+    c.shadowColor = 'transparent';
+  }
+
+  // Draw image
+  c.translate(x + w / 2, y + h / 2);
+  c.rotate(rotation * Math.PI / 180);
+  const rw = rotation === 90 || rotation === 270 ? h : w;
+  const rh = rotation === 90 || rotation === 270 ? w : h;
+  // cover fit
+  const scale = Math.max(w / img.width, h / img.height);
+  const sw = img.width * scale;
+  const sh = img.height * scale;
+  c.drawImage(img, -sw / 2, -sh / 2, sw, sh);
+  c.restore();
+}
+
+function roundRect(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+function drawCanvas(c) {
+  // background
+  if (settings.bgColor === 'transparent') {
+    c.clearRect(0, 0, canvas.width, canvas.height);
+  } else {
+    c.fillStyle = settings.bgColor;
+    c.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  if (images.length === 0) return;
+
+  if (mode === 'grid') drawGrid(c);
+  else if (mode === 'long') drawLong(c);
+  else drawFreeCanvas(c);
+}
+
+function renderGrid() {
+  if (images.length === 0) {
+    canvas.width = 800; canvas.height = 600;
+    const c = ctx;
+    if (settings.bgColor === 'transparent') c.clearRect(0,0,800,600);
+    else { c.fillStyle = settings.bgColor; c.fillRect(0,0,800,600); }
+    return;
+  }
+  const cols = Math.min(settings.columns, images.length);
+  const rows = Math.ceil(images.length / cols);
+  const pad = settings.padding;
+  const gap = settings.gap;
+  const canvasW = Math.max(400, settings.canvasW || 1200);
+
+  // Calculate cell size
+  const cellW = (canvasW - pad * 2 - gap * (cols - 1)) / cols;
+
+  // Calculate row heights based on aspect ratios
+  const cellHs = [];
+  for (let r = 0; r < rows; r++) {
+    let maxAR = 0;
+    for (let ci = 0; ci < cols; ci++) {
+      const idx = r * cols + ci;
+      if (idx < images.length) {
+        const rd = getRotatedDims(images[idx].img, images[idx].rotation);
+        maxAR = Math.max(maxAR, rd.h / rd.w);
+      }
+    }
+    cellHs.push(cellW * (maxAR || 0.75));
+  }
+
+  const canvasH = pad * 2 + cellHs.reduce((a, b) => a + b, 0) + gap * (rows - 1);
+
+  canvas.width = Math.round(canvasW);
+  canvas.height = Math.round(canvasH);
+
+  drawCanvas(ctx);
+}
+
+function drawGrid(c) {
+  const cols = Math.min(settings.columns, images.length);
+  const rows = Math.ceil(images.length / cols);
+  const pad = settings.padding;
+  const gap = settings.gap;
+  const cellW = (canvas.width - pad * 2 - gap * (cols - 1)) / cols;
+
+  // Recalc row heights
+  const cellHs = [];
+  for (let r = 0; r < rows; r++) {
+    let maxAR = 0;
+    for (let ci = 0; ci < cols; ci++) {
+      const idx = r * cols + ci;
+      if (idx < images.length) {
+        const rd = getRotatedDims(images[idx].img, images[idx].rotation);
+        maxAR = Math.max(maxAR, rd.h / rd.w);
+      }
+    }
+    cellHs.push(cellW * (maxAR || 0.75));
+  }
+
+  for (let i = 0; i < images.length; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = pad + col * (cellW + gap);
+    const y = pad + row * (cellHs[row] + gap);
+    drawRoundedImage(c, images[i].img, x, y, cellW, cellHs[row], images[i].rotation, settings.borderRadius, settings.shadow);
+  }
+}
+
+function renderLong() {
+  if (images.length === 0) {
+    canvas.width = 800; canvas.height = 600;
+    const c = ctx;
+    if (settings.bgColor === 'transparent') c.clearRect(0,0,800,600);
+    else { c.fillStyle = settings.bgColor; c.fillRect(0,0,800,600); }
+    return;
+  }
+  const pad = settings.padding;
+  const gap = settings.gap;
+
+  // Find max width
+  let maxW = 0;
+  images.forEach(im => {
+    const rd = getRotatedDims(im.img, im.rotation);
+    maxW = Math.max(maxW, rd.w);
+  });
+  maxW = Math.max(maxW, 400);
+
+  const canvasW = maxW + pad * 2;
+  let totalH = pad * 2 + gap * (images.length - 1);
+  const scaledHs = [];
+  images.forEach(im => {
+    const rd = getRotatedDims(im.img, im.rotation);
+    const scale = maxW / rd.w;
+    const sh = rd.h * scale;
+    scaledHs.push(sh);
+    totalH += sh;
+  });
+
+  canvas.width = Math.round(canvasW);
+  canvas.height = Math.round(totalH);
+
+  drawCanvas(ctx);
+}
+
+function drawLong(c) {
+  const pad = settings.padding;
+  const gap = settings.gap;
+
+  let maxW = 0;
+  images.forEach(im => {
+    const rd = getRotatedDims(im.img, im.rotation);
+    maxW = Math.max(maxW, rd.w);
+  });
+
+  const scaledHs = [];
+  images.forEach(im => {
+    const rd = getRotatedDims(im.img, im.rotation);
+    const scale = maxW / rd.w;
+    scaledHs.push(rd.h * scale);
+  });
+
+  let y = pad;
+  images.forEach((im, i) => {
+    drawRoundedImage(c, im.img, pad, y, maxW, scaledHs[i], im.rotation, settings.borderRadius, settings.shadow);
+    y += scaledHs[i] + gap;
+  });
+}
+
+function renderFree() {
+  canvas.width = settings.canvasW;
+  canvas.height = settings.canvasH;
+  drawCanvas(ctx);
+
+  // Draw selection
+  if (selectedImageId !== null && mode === 'free') {
+    const im = images.find(i => i.id === selectedImageId);
+    if (im) {
+      ctx.save();
+      ctx.strokeStyle = '#f97316';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(im.x - 2, im.y - 2, im.w + 4, im.h + 4);
+      ctx.setLineDash([]);
+
+      // Resize handles
+      const handles = getHandles(im);
+      handles.forEach(h => {
+        ctx.fillStyle = '#f97316';
+        ctx.fillRect(h.x - 4, h.y - 4, 8, 8);
+      });
+      ctx.restore();
+    }
+  }
+}
+
+function drawFreeCanvas(c) {
+  images.forEach(im => {
+    drawRoundedImage(c, im.img, im.x, im.y, im.w, im.h, im.rotation, settings.borderRadius, settings.shadow);
+  });
+}
+
+function getHandles(im) {
+  return [
+    { x: im.x, y: im.y, cursor: 'nw-resize', pos: 'tl' },
+    { x: im.x + im.w, y: im.y, cursor: 'ne-resize', pos: 'tr' },
+    { x: im.x + im.w, y: im.y + im.h, cursor: 'se-resize', pos: 'br' },
+    { x: im.x, y: im.y + im.h, cursor: 'sw-resize', pos: 'bl' }
+  ];
+}
+
+// ---- Canvas mouse/touch interaction for Free mode ----
+function canvasCoords(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  let cx, cy;
+  if (e.touches) {
+    cx = (e.touches[0].clientX - rect.left) * scaleX;
+    cy = (e.touches[0].clientY - rect.top) * scaleY;
+  } else {
+    cx = (e.clientX - rect.left) * scaleX;
+    cy = (e.clientY - rect.top) * scaleY;
+  }
+  return { x: cx, y: cy };
+}
+
+function hitTest(px, py) {
+  // Reverse order: top image first
+  for (let i = images.length - 1; i >= 0; i--) {
+    const im = images[i];
+    if (px >= im.x && px <= im.x + im.w && py >= im.y && py <= im.y + im.h) {
+      return im;
+    }
+  }
+  return null;
+}
+
+function hitHandle(px, py) {
+  if (selectedImageId === null) return null;
+  const im = images.find(i => i.id === selectedImageId);
+  if (!im) return null;
+  const handles = getHandles(im);
+  for (const h of handles) {
+    if (Math.abs(px - h.x) < 8 && Math.abs(py - h.y) < 8) return h;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousedown', onPointerDown);
+canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+
+function onPointerDown(e) {
+  if (mode !== 'free') return;
+  e.preventDefault();
+  const p = canvasCoords(e);
+
+  // Check resize handle first
+  const handle = hitHandle(p.x, p.y);
+  if (handle) {
+    const im = images.find(i => i.id === selectedImageId);
+    freeDrag = { active: true, id: selectedImageId, resizing: true, handle: handle.pos, startX: p.x, startY: p.y, origX: im.x, origY: im.y, origW: im.w, origH: im.h };
+    return;
+  }
+
+  const hit = hitTest(p.x, p.y);
+  if (hit) {
+    selectedImageId = hit.id;
+    // Move to top
+    const idx = images.indexOf(hit);
+    images.splice(idx, 1);
+    images.push(hit);
+    freeDrag = { active: true, id: hit.id, resizing: false, handle: null, offX: p.x - hit.x, offY: p.y - hit.y };
+    render();
+    updateThumbs();
+  } else {
+    selectedImageId = null;
+    render();
+  }
+}
+
+window.addEventListener('mousemove', onPointerMove);
+window.addEventListener('touchmove', onPointerMove, { passive: false });
+
+function onPointerMove(e) {
+  if (mode !== 'free') return;
+  if (!freeDrag.active) {
+    // Update cursor
+    if (e.target === canvas) {
+      const p = canvasCoords(e);
+      const handle = hitHandle(p.x, p.y);
+      if (handle) {
+        canvas.style.cursor = handle.cursor;
+      } else {
+        const hit = hitTest(p.x, p.y);
+        canvas.style.cursor = hit ? 'move' : 'default';
+      }
+    }
+    return;
+  }
+  e.preventDefault();
+  const p = canvasCoords(e);
+  const im = images.find(i => i.id === freeDrag.id);
+  if (!im) return;
+
+  if (freeDrag.resizing) {
+    const dx = p.x - freeDrag.startX;
+    const dy = p.y - freeDrag.startY;
+    const aspect = freeDrag.origW / freeDrag.origH;
+    const h = freeDrag.handle;
+
+    if (h === 'br') {
+      im.w = Math.max(30, freeDrag.origW + dx);
+      im.h = im.w / aspect;
+    } else if (h === 'bl') {
+      const newW = Math.max(30, freeDrag.origW - dx);
+      im.h = newW / aspect;
+      im.x = freeDrag.origX + freeDrag.origW - newW;
+      im.w = newW;
+    } else if (h === 'tr') {
+      const newW = Math.max(30, freeDrag.origW + dx);
+      const newH = newW / aspect;
+      im.y = freeDrag.origY + freeDrag.origH - newH;
+      im.w = newW;
+      im.h = newH;
+    } else if (h === 'tl') {
+      const newW = Math.max(30, freeDrag.origW - dx);
+      const newH = newW / aspect;
+      im.x = freeDrag.origX + freeDrag.origW - newW;
+      im.y = freeDrag.origY + freeDrag.origH - newH;
+      im.w = newW;
+      im.h = newH;
+    }
+  } else {
+    im.x = p.x - freeDrag.offX;
+    im.y = p.y - freeDrag.offY;
+  }
+  render();
+}
+
+window.addEventListener('mouseup', onPointerUp);
+window.addEventListener('touchend', onPointerUp);
+
+function onPointerUp() {
+  freeDrag.active = false;
+  freeDrag.resizing = false;
+}
+
+// ---- Drag and drop on workspace ----
+const workspace = document.getElementById('workspace');
+workspace.addEventListener('dragover', e => {
+  if (e.dataTransfer.types.includes('Files')) {
+    e.preventDefault();
+    workspace.classList.add('drop-highlight');
+  }
+});
+workspace.addEventListener('dragleave', () => workspace.classList.remove('drop-highlight'));
+workspace.addEventListener('drop', e => {
+  workspace.classList.remove('drop-highlight');
+  if (e.dataTransfer.files.length) {
+    handleFiles(e.dataTransfer.files);
+  }
+});
+
+// ---- Close export menu on outside click ----
+document.addEventListener('click', e => {
+  const menu = document.getElementById('export-menu');
+  if (menu.classList.contains('open') && !e.target.closest('#export-menu') && !e.target.closest('[onclick="toggleExportMenu()"]')) {
+    menu.classList.remove('open');
+  }
+});
+
+// ---- Keyboard shortcuts ----
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (mode === 'free' && selectedImageId !== null) {
+      deleteImage(selectedImageId);
+    }
+  }
+});
+
+// ---- Responsive canvas sizing ----
+function fitCanvas() {
+  const container = document.getElementById('canvas-container');
+  const ws = document.getElementById('workspace');
+  const maxW = ws.clientWidth - 48;
+  const maxH = ws.clientHeight - 48;
+  const cw = canvas.width;
+  const ch = canvas.height;
+  if (cw === 0 || ch === 0) return;
+  const scale = Math.min(1, maxW / cw, maxH / ch);
+  canvas.style.width = Math.round(cw * scale) + 'px';
+  canvas.style.height = Math.round(ch * scale) + 'px';
+}
+
+const ro = new ResizeObserver(fitCanvas);
+ro.observe(document.getElementById('workspace'));
+
+const origRender = window.render;
+window.render = function() {
+  origRender();
+  fitCanvas();
+};
+
+// ---- Init ----
+syncUIToSettings();
+render();
+
+})();
+</script>
+</body>
+</html>
